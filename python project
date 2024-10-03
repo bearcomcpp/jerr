@@ -1,0 +1,52 @@
+import os
+from cryptography.fernet import Fernet
+
+class FileLocker:
+    def __init__(self, key):
+        self.key = key
+        self.cipher_suite = Fernet(self.key)
+
+    def encrypt_file(self, file_path):
+        with open(file_path, 'rb') as file:
+            file_data = file.read()
+        encrypted_data = self.cipher_suite.encrypt(file_data)
+        with open(file_path, 'wb') as file:
+            file.write(encrypted_data)
+
+    def decrypt_file(self, file_path):
+        with open(file_path, 'rb') as file:
+            encrypted_data = file.read()
+        decrypted_data = self.cipher_suite.decrypt(encrypted_data)
+        with open(file_path, 'wb') as file:
+            file.write(decrypted_data)
+
+def generate_key():
+    return Fernet.generate_key()
+
+def main():
+    key = generate_key()
+    locker = FileLocker(key)
+
+    while True:
+        print("File Locker App")
+        print("1. Lock a file")
+        print("2. Unlock a file")
+        print("3. Exit")
+        choice = input("Enter your choice: ")
+
+        if choice == "1":
+            file_path = input("Enter the file path: ")
+            locker.encrypt_file(file_path)
+            print("File locked successfully!")
+        elif choice == "2":
+            file_path = input("Enter the file path: ")
+            locker.decrypt_file(file_path)
+            print("File unlocked successfully!")
+        elif choice == "3":
+            break
+        else:
+            print("Invalid choice. Please try again.")
+
+if __name__ == "__main__":
+    main()
+  
