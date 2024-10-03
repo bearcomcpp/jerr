@@ -1,0 +1,73 @@
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <vector>
+#include <cstdlib>
+
+using namespace std;
+
+void encryptDecrypt(string &data, const string &key) {
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] ^= key[i % key.size()];
+    }
+}
+
+void lockFile(const string &filename, const string &key) {
+    ifstream inputFile(filename, ios::binary);
+    if (!inputFile) {
+        cerr << "Error opening file for reading: " << filename << endl;
+        return;
+    }
+
+    vector<char> buffer((istreambuf_iterator<char>(inputFile)), istreambuf_iterator<char>());
+    inputFile.close();
+
+    string data(buffer.begin(), buffer.end());
+    encryptDecrypt(data, key);
+
+    ofstream outputFile(filename, ios::binary);
+    if (!outputFile) {
+        cerr << "Error opening file for writing: " << filename << endl;
+        return;
+    }
+
+    outputFile.write(data.c_str(), data.size());
+    outputFile.close();
+
+    cout << "File locked successfully." << endl;
+}
+
+void unlockFile(const string &filename, const string &key) {
+    lockFile(filename, key); // Since XOR is symmetric, we can use the same function
+    cout << "File unlocked successfully." << endl;
+}
+
+int main() {
+    string filename, key;
+    int choice;
+
+    cout << "File Locker App" << endl;
+    cout << "1. Lock File" << endl;
+    cout << "2. Unlock File" << endl;
+    cout << "Enter your choice: ";
+    cin >> choice;
+
+    cout << "Enter filename: ";
+    cin >> filename;
+    cout << "Enter key: ";
+    cin >> key;
+
+    switch (choice) {
+        case 1:
+            lockFile(filename, key);
+            break;
+        case 2:
+            unlockFile(filename, key);
+            break;
+        default:
+            cerr << "Invalid choice." << endl;
+            break;
+    }
+
+    return 0;
+}
