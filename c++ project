@@ -1,73 +1,127 @@
+
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <vector>
-#include <cstdlib>
+#include <cryptopp/aes.h>
+#include <cryptopp/modes.h>
+#include <cryptopp/filters.h>
+#include <cryptopp/hex.h>
+#include <cryptopp/sha.h>
 
 using namespace std;
+using namespace CryptoPP;
 
-void encryptDecrypt(string &data, const string &key) {
-    for (size_t i = 0; i < data.size(); ++i) {
-        data[i] ^= key[i % key.size()];
-    }
+// Function to generate a random key
+string generateKey() {
+    byte key[32]; // 256-bit key
+    AutoSeededRandomPool prng;
+    prng.GenerateBlock(key, 32);
+    HexEncoder encoder;
+    string keyStr;
+    encoder.Attach(new StringSink(keyStr));
+    encoder.Put(key, 32);
+    encoder.MessageEnd();
+    return keyStr;
 }
 
-void lockFile(const string &filename, const string &key) {
-    ifstream inputFile(filename, ios::binary);
-    if (!inputFile) {
-        cerr << "Error opening file for reading: " << filename << endl;
+// Function to encrypt a file
+void encryptFile(string filename, string password) {
+    // Generate a random key
+    string key = generateKey();
+
+    // Derive a key from the password using PBKDF2
+    byte derivedKey[32];
+    PKCS5_PBKDF2_HMAC<SHA256> pbkdf2;
+    pbkdf2.DeriveKey(derivedKey, sizeof(derivedKey), (byte*)password.c_str(), password.length(), (byte*)"salt", 4, 1000);
+
+    // Create an AES-256-CBC encryptor
+    AES_CBC_Mode_ExternalCipher encryptor(derivedKey, sizeof(derivedKey), (byte*)key.c_str(), key.length());
+
+    // Open the file in read mode
+    ifstream file(filename, ios::binary);
+    if (!file) {
+        cout << "Error: Unable to open file." << endl;
         return;
     }
 
-    vector<char> buffer((istreambuf_iterator<char>(inputFile)), istreambuf_iterator<char>());
-    inputFile.close();
+    // Read the file contents
+    file.seekg(0, ios::end);
+    int fileSize = file.tellg();
+    vector<byte> fileBuffer(fileSize);
+    file.seekg(0, ios::beg);
+    file.read((char*)fileBuffer.data(), fileSize);
+    file.close();
 
-    string data(buffer.begin(), buffer.end());
-    encryptDecrypt(data, key);
+    // Encrypt the file contents
+    StringSource(fileBuffer.data(), fileSize, true, new StreamTransformationFilter(encryptor, new HexEncoder(new StringSink(keyStr))));
 
-    ofstream outputFile(filename, ios::binary);
-    if (!outputFile) {
-        cerr << "Error opening file for writing: " << filename << endl;
-        return;
+    // Write the encrypted contents to a new file
+    ofstream encryptedFile(filename + ".locked", ios::binary);
+    encryptedFile.write((char*)fileBuffer.data(), fileSize);
+    encryptedFile.close();
+
+    // Remove the original file
+    if (remove(filename.c_str()) != 0) {
+        cout << "Error: Unable to delete original file." << endl;
     }
-
-    outputFile.write(data.c_str(), data.size());
-    outputFile.close();
 
     cout << "File locked successfully." << endl;
 }
 
-void unlockFile(const string &filename, const string &key) {
-    lockFile(filename, key); // Since XOR is symmetric, we can use the same function
+// Function to decrypt a file
+void decryptFile(string filename, string password) {
+    // Open the locked file in read mode
+    ifstream encryptedFile(filename, ios::binary);
+    if (!encryptedFile) {
+        cout << "Error: Unable to open locked file." << endl;
+        return;
+    }
+
+    // Read the encrypted file contents
+    encryptedFile.seekg(0, ios::end);
+    int fileSize = encryptedFile.tellg();
+    vector<byte> fileBuffer(fileSize);
+    encryptedFile.seekg(0, ios::beg);
+    encryptedFile.read((char*)fileBuffer.data(), fileSize);
+    encryptedFile.close();
+
+    // Derive a key from the password using PBKDF2
+    byte derivedKey[32];
+    PKCS5_PBKDF2_HMAC<SHA256> pbkdf2;
+    pbkdf2.DeriveKey(derivedKey, sizeof(derivedKey), (byte*)password.c_str(), password.length(), (byte*)"salt", 4, 1000);
+
+    // Create an AES-256-CBC decryptor
+    AES_CBC_Mode_ExternalCipher decryptor(derivedKey, sizeof(derivedKey), (byte*)key.c_str(), key.length());
+
+    // Decrypt the file contents
+    StringSource(fileBuffer.data(), fileSize, true, new StreamTransformationFilter(decryptor, new HexDecoder(new StringSink(keyStr))));
+
+    // Write the decrypted contents to a new file
+    ofstream decryptedFile(filename.substr(0, filename.length() - 6), ios::binary);
+    decryptedFile.write((char*)fileBuffer.data(), fileSize);
+    decryptedFile.close();
+
+    // Remove the locked file
+    if (remove(filename.c_str()) != 0) {
+        cout << "Error: Unable to delete locked file." << endl;
+    }
+
     cout << "File unlocked successfully." << endl;
 }
 
 int main() {
-    string filename, key;
-    int choice;
+    string filename, password;
 
-    cout << "File Locker App" << endl;
-    cout << "1. Lock File" << endl;
-    cout << "2. Unlock File" << endl;
-    cout << "Enter your choice: ";
-    cin >> choice;
-
-    cout << "Enter filename: ";
+    cout << "Enter the filename to lock: ";
     cin >> filename;
-    cout << "Enter key: ";
-    cin >> key;
 
-    switch (choice) {
-        case 1:
-            lockFile(filename, key);
-            break;
-        case 2:
-            unlockFile(filename, key);
-            break;
-        default:
-            cerr << "Invalid choice." << endl;
-            break;
-    }
+    cout << "Enter the password: ";
+    cin >> password;
 
-    return 0;
-}
+    encryptFile(filename, password);
+
+    cout << "Enter the filename to unlock (including .locked extension): ";
+    cin >> filename;
+
+        
