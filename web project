@@ -1,0 +1,128 @@
+#backend = javascript
+// server.js
+const express = require('express');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
+
+const app = express();
+const PORT = 3000;
+
+// Set up storage engine for multer
+const storage = multer.diskStorage({
+    destination: './uploads/',
+    filename: function (req, file, cb) {
+        cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname));
+    }
+});
+
+// Initialize upload variable
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 1000000 }, // 1MB limit
+    fileFilter: function (req, file, cb) {
+        checkFileType(file, cb);
+    }
+}).single('myFile');
+
+// Check file type
+function checkFileType(file, cb) {
+    const filetypes = /jpeg|jpg|png|gif|pdf|doc|docx|txt/;
+    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = filetypes.test(file.mimetype);
+
+    if (mimetype && extname) {
+        return cb(null, true);
+    } else {
+        cb('Error: Files of this type are not allowed!');
+    }
+}
+
+// Upload endpoint
+app.post('/upload', (req, res) => {
+    upload(req, res, (err) => {
+        if (err) {
+            res.status(400).send(err);
+        } else {
+            if (req.file == undefined) {
+                res.status(400).send('Error: No File Selected!');
+            } else {
+                res.send(`File uploaded: ${req.file.filename}`);
+            }
+        }
+    });
+});
+
+// Download endpoint
+app.get('/download/:filename', (req, res) => {
+    const file = `${__dirname}/uploads/${req.params.filename}`;
+    res.download(file);
+});
+
+// Delete endpoint
+app.delete('/delete/:filename', (req, res) => {
+    const file = `${__dirname}/uploads/${req.params.filename}`;
+    fs.unlink(file, (err) => {
+        if (err) {
+            res.status(400).send('Error: File not found!');
+        } else {
+            res.send('File deleted!');
+        }
+    });
+});
+
+// Serve static files
+app.use(express.static('public'));
+
+app.listen(PORT, () => {
+    console.log(`Server started on http://localhost:${PORT}`);
+});
+#frontend = html 
+<!-- public/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Locker App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>File Locker App</h1>
+        <form id="uploadForm">
+            <input type="file" id="fileInput" name="myFile">
+            <button type="submit">Upload</button>
+        </form>
+        <div id="message"></div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
+#beutify = css
+/* public/styles.css */
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #f4f4f4;
+}
+
+.container {
+    text-align: center;
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+form {
+    margin-bottom: 20px;
+}
+
+#message {
+    margin-top: 20px;
+    color: green;
+}
